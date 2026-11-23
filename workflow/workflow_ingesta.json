@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "url": "https://raw.githubusercontent.com/ericmonne/chocolatech-inmersion-g10/refs/heads/main/Manual%20de%20RH%20ChocolaTech%20LAD.txt",
+        "url": "https://raw.githubusercontent.com/Nikotastic/n8n-rh-chatbot/main/docs/politicas.txt",
         "options": {
           "response": {
             "response": {
