@@ -1,146 +1,137 @@
-# 🤖 HR Buddy - Asistente Virtual de RR.HH.
+# 🤖 HR Buddy: asistente virtual de RR. HH.
 
 ![n8n](https://img.shields.io/badge/n8n-workflow-orange?logo=n8n)
 ![Cohere](https://img.shields.io/badge/Cohere-command--a--03--2025-blue)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram-Bot-2CA5E0?logo=telegram)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 
-Bot de Telegram con IA para gestión de recursos humanos usando n8n, Cohere y MySQL.
+Bot de Telegram con IA que responde consultas de recursos humanos. Combina un agente con **RAG** sobre el manual de políticas de la empresa y consultas a **MySQL** para los datos personales de cada empleado, con memoria conversacional por usuario.
 
-## 📝 Descripción
+## 📝 Qué hace
 
-HR Buddy es un asistente virtual inteligente que ayuda a los empleados con consultas de RR.HH.:
-
-- ✅ Consulta de saldos de vacaciones
-- ✅ Banco de horas
-- ✅ Políticas de RR.HH.
-- ✅ Información sobre viajes y horarios
-- ✅ Memoria conversacional por usuario
-
-## 📚 Contexto del Proyecto
-
-Proyecto desarrollado durante una formación práctica en automatización e inteligencia artificial con n8n, enfocado en la construcción de asistentes virtuales para procesos empresariales. El objetivo principal fue aprender la integración entre Telegram, modelos de lenguaje, bases de datos y flujos automatizados aplicados a escenarios de Recursos Humanos.
+- ✅ Consulta el saldo de vacaciones y el banco de horas **del empleado que escribe**
+- ✅ Responde preguntas sobre políticas de RR. HH., viajes y horarios a partir del manual
+- ✅ Mantiene el contexto de la conversación por usuario
+- ✅ Nunca comparte datos de otros empleados
 
 ## 🏗️ Arquitectura
 
-El proyecto se compone de **dos workflows** independientes en n8n:
+```mermaid
+flowchart LR
+    U[Empleado en Telegram] -->|mensaje| T[Telegram Trigger]
+    T --> A[Agente IA<br/>Cohere command-a]
+    A <--> M[Memoria por usuario<br/>clave: telegram_id]
+    A -->|herramienta| V[(Vector Store<br/>manual de RR. HH.)]
+    A -->|herramienta| DB[(MySQL<br/>WHERE telegram_id = remitente)]
+    A --> R[Respuesta por Telegram]
+    R --> U
 
-| Workflow                | Descripción                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------ |
-| `workflow_ingesta.json` | Descarga el PDF de políticas, lo embebe con Cohere y lo almacena en el Vector Store        |
-| `workflow_agente.json`  | Recibe mensajes de Telegram, consulta MySQL y el Vector Store, y responde con el agente IA |
+    subgraph Ingesta
+        P[docs/politicas.txt] --> E[Embeddings Cohere<br/>embed-multilingual-v3.0] --> V
+    end
+```
 
-> ⚠️ Debes ejecutar `workflow_ingesta.json` **una sola vez** antes de activar el agente.
+El proyecto tiene **dos workflows** de n8n:
+
+| Workflow | Qué hace |
+|---|---|
+| `workflow/workflow_ingesta.json` | Descarga `docs/politicas.txt`, genera los embeddings con Cohere y los guarda en el Vector Store |
+| `workflow/workflow_agente.json` | Recibe los mensajes de Telegram, consulta el Vector Store y MySQL, y responde con el agente |
+
+## 🔐 Seguridad y privacidad
+
+El bot maneja datos personales, así que la identidad del empleado **no depende de lo que escriba en el chat**:
+
+- La consulta a MySQL filtra siempre por el `telegram_id` de quien envía el mensaje. Ese valor lo pone n8n, no el modelo, así que el agente no puede buscar a otra persona aunque se lo pidan.
+- La herramienta solo devuelve las columnas necesarias y es de solo lectura.
+- Si la cuenta de Telegram no está vinculada a un empleado, el bot no inventa datos y remite a RR. HH.
+- Las pruebas de privacidad (pedir datos de otros, listar empleados, prompt injection) están en [`docs/evaluacion.md`](docs/evaluacion.md).
+
+> En la primera versión el bot pedía el nombre y buscaba con `LIKE`, lo que permitía consultar los datos de cualquier empleado escribiendo su nombre. Se corrigió vinculando cada empleado a su cuenta de Telegram.
 
 ## 🛠️ Tecnologías
 
-- **n8n** — Automatización de workflows
-- **Telegram Bot API** — Interfaz de chat
-- **Cohere** (`command-a-03-2025`) — Modelo de lenguaje y embeddings
-- **MySQL** — Base de datos de empleados
-- **LangChain (via n8n)** — Agente con RAG y herramientas
+- **n8n**: orquestación de workflows y agente (LangChain)
+- **Cohere**: `command-a-03-2025` como modelo y `embed-multilingual-v3.0` para embeddings
+- **MySQL 8**: datos de empleados
+- **Telegram Bot API**: interfaz de chat
+- **Docker Compose**: entorno local con un solo comando
 
-## 📦 Requisitos Previos
+## 🚀 Cómo correrlo
 
-- Node.js 18+ y npm
-- n8n instalado (`npm install -g n8n`)
-- Cuenta de Telegram y bot creado con [@BotFather](https://t.me/BotFather)
-- API Key de Cohere → https://cohere.com
-- Base de datos MySQL activa
-
-## 🚀 Instalación
-
-### 1. Clonar el repositorio
+### 1. Clonar y configurar
 
 ```bash
-git clone https://github.com/tu-usuario/n8n-hr-chatbot.git
-cd n8n-hr-chatbot
+git clone https://github.com/Nikotastic/n8n-rh-chatbot.git
+cd n8n-rh-chatbot
+cp .env.example .env   # edita las contraseñas de MySQL
 ```
 
-### 2. Configurar variables de entorno
+Antes de levantar el entorno, cambia en `db/schema.sql` el `telegram_id` de ejemplo por el tuyo (puedes obtenerlo escribiéndole a [@userinfobot](https://t.me/userinfobot)).
+
+### 2. Levantar n8n y MySQL
 
 ```bash
-cp .env.example .env
+docker compose up -d
 ```
 
-Edita .env con tus credenciales reales:
+MySQL crea la tabla `empleados` y el dato de ejemplo automáticamente. n8n queda en `http://localhost:5678`.
 
-```bash
-TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-COHERE_API_KEY=tu_api_key_de_cohere
-MYSQL_HOST=localhost
-MYSQL_DATABASE=rrhh_db
-MYSQL_USER=root
-MYSQL_PASSWORD=tu_password
-```
+### 3. Importar los workflows
 
-### 3. Crear tabla en MySQL
+1. En n8n ve a **Workflows → Import from File** e importa los dos archivos de `workflow/`.
+2. Configura las credenciales en n8n:
+   - **Telegram**: token del bot creado con [@BotFather](https://t.me/BotFather)
+   - **Cohere**: API key de [cohere.com](https://cohere.com)
+   - **MySQL**: host `mysql`, puerto `3306` y los datos de tu `.env`
 
-```sql
-CREATE TABLE empleados (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(255) NOT NULL,
-  saldo_vacaciones INT DEFAULT 0,
-  banco_horas DECIMAL(5,2) DEFAULT 0,
-  departamento VARCHAR(100),
-  fecha_ingreso DATE
-);
+### 4. Cargar el manual
 
--- Ejemplo de datos
-INSERT INTO empleados (nombre, saldo_vacaciones, banco_horas, departamento)
-VALUES ('Rafael Mendez', 0, 15.5, 'Tecnología');
-```
+Abre `workflow_ingesta.json` y haz clic en **Execute Workflow**.
 
-### 4. Importar workflows en n8n
+> ⚠️ El Simple Vector Store de n8n vive en memoria: si reinicias n8n, vuelve a ejecutar la ingesta.
 
-1. Abre `http://localhost:5678`
-2. Ve a **Workflows → Import from File**
-3. Importa primero `workflows/workflow_ingesta.json`
-4. Luego importa `workflows/workflow_agente.json`
-5. En cada workflow, configura las credenciales:
-   - **Telegram**: token del bot
-   - **Cohere**: API Key
-   - **MySQL**: datos de conexión
+### 5. Activar el agente
 
-### 5. Cargar la base de conocimientos (solo una vez)
+Activa `workflow_agente.json` y escríbele al bot en Telegram.
 
-1. Abre el workflow `workflow_ingesta.json` en n8n
-2. Haz clic en **Execute Workflow**
-3. Verifica que el Simple Vector Store se haya poblado correctamente
-
-### 6. Activar el agente
-
-Activa el workflow `workflow_agente.json` — a partir de ahora el bot responderá mensajes en Telegram.
-
-## 💬 Uso
-
-Una vez activo, escribe al bot en Telegram:
-
-👤 Tú: ¿Cuántos días de vacaciones me quedan?
-🤖 HR Buddy: Hola Rafael, tienes 12 días de saldo de vacaciones disponibles.
-👤 Tú: ¿Cuál es la política de trabajo remoto?
-🤖 HR Buddy: Según las políticas de la empresa, el trabajo remoto está permitido...
-
-### 🔧 Estructura del Proyecto
+## 💬 Ejemplo
 
 ```
+👤 ¿Cuántos días de vacaciones me quedan?
+🤖 Hola Rafael, tienes 12 días de vacaciones disponibles.
 
-n8n-hr-chatbot/
-├── workflows/
-│   ├── workflow_ingesta.json    # Flujo de carga de documentos al Vector Store
-│   └── workflow_agente.json     # Flujo del agente de Telegram
+👤 ¿Cuál es la política de trabajo remoto?
+🤖 Según el manual de ChocolaTech, el trabajo remoto...
+```
+
+![HR Buddy en Telegram](docs/img/demo.jpg)
+
+## 📁 Estructura
+
+```
+n8n-rh-chatbot/
+├── workflow/
+│   ├── workflow_ingesta.json   # Carga del manual al Vector Store
+│   └── workflow_agente.json    # Agente de Telegram
+├── db/
+│   └── schema.sql              # Tabla de empleados y dato de ejemplo
 ├── docs/
-│   ├── politicas.txt      # Base de conocimientos (RAG)
-│   └── img/
-│       └── demo.jpg             # Captura del bot en acción
-├── .env.example                 # Plantilla de variables de entorno
-├── .gitignore
+│   ├── politicas.txt           # Manual de RR. HH. (base de conocimientos)
+│   ├── evaluacion.md           # Preguntas de prueba
+│   └── img/demo.jpg
+├── docker-compose.yml
+├── .env.example
 └── README.md
-
 ```
 
-## 📱 Vista Previa del Chatbot
+## 🧭 Próximos pasos
 
-Así se ve HR Buddy funcionando en Telegram:
+- Cambiar el Vector Store en memoria por uno persistente (pgvector o Qdrant)
+- Soportar notas de voz con transcripción
+- Automatizar la evaluación de respuestas
 
-![HR Buddy Telegram](docs/img/demo.jpg)
+## 📚 Contexto
+
+Proyecto desarrollado durante una formación práctica en automatización e inteligencia artificial con n8n, y mejorado después con foco en seguridad de datos personales y facilidad de despliegue.

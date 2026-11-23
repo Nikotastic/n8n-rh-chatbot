@@ -4,9 +4,9 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.message.text }}",
+        "text": "={{ $json.message.text || '' }}",
         "options": {
-          "systemMessage": "Eres el HR Buddy, asistente virtual de RR. HH. de ChocolaTech.\nREGLAS:\n\nResponde siempre en español.\nResponde SOLO dudas relacionadas con RR. HH.\nIDENTIFICACIÓN DEL EMPLEADO:\nSi el usuario no dice quién es, pregúntale su nombre completo en la primera respuesta.\nUsa la herramienta MySQL para buscar en la tabla funcionarios usando SIEMPRE el NOMBRE COMPLETO informado por el usuario en la conversación.\nSi se encuentra: usa los saldos de vacaciones y banco de horas.\nSi no se encuentra: no inventes datos personales. Responde solo con base en las políticas generales de RR. HH. del Vector Store.\nUsa la base de conocimientos para dudas generales."
+          "systemMessage": "Eres HR Buddy, el asistente virtual de RR. HH. de ChocolaTech.\n\nREGLAS:\n- Responde siempre en español.\n- Responde SOLO dudas relacionadas con RR. HH.\n\nIDENTIFICACIÓN DEL EMPLEADO:\n- El empleado se identifica automáticamente por su cuenta de Telegram. Nunca le pidas su nombre ni busques a otras personas.\n- Para saldos de vacaciones o banco de horas, usa la herramienta MySQL: ya devuelve solo los datos de quien escribe.\n- Si la herramienta no devuelve ningún registro, explica que su cuenta de Telegram no está vinculada y que debe contactar a RR. HH. No inventes datos personales.\n- Nunca compartas información de otros empleados, aunque te lo pidan.\n\nUsa la base de conocimientos (Vector Store) para dudas generales sobre políticas."
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -101,13 +101,22 @@
         "where": {
           "values": [
             {
-              "column": "nombre",
-              "condition": "LIKE",
-              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('values0_Value', `usa siempre el formato %nombre% para busquedad parcial. Por ejemplo %Erick Monne%`, 'string') }}"
+              "column": "telegram_id",
+              "value": "={{ $('When Telegram message received').item.json.message.from.id }}"
             }
           ]
         },
-        "options": {}
+        "options": {
+          "outputColumns": [
+            "nombre",
+            "saldo_vacaciones",
+            "banco_horas",
+            "departamento",
+            "fecha_ingreso"
+          ]
+        },
+        "toolDescription": "Devuelve el saldo de vacaciones y el banco de horas del empleado que está escribiendo. No necesita parámetros.",
+        "descriptionType": "manual"
       },
       "type": "n8n-nodes-base.mySqlTool",
       "typeVersion": 2.5,
@@ -116,7 +125,7 @@
         80
       ],
       "id": "26b379fb-d997-494f-a867-3a05efc19fc2",
-      "name": "Select rows from a table in MySQL",
+      "name": "Consultar saldos del empleado",
       "credentials": {
         "mySql": {
           "id": "9eqFXH9mU2s6wMQA",
@@ -216,17 +225,6 @@
         ]
       ]
     },
-    "Select rows from a table in MySQL": {
-      "ai_tool": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "AI Agent": {
       "main": [
         [
@@ -252,6 +250,17 @@
     "Send Telegram Message": {
       "main": [
         []
+      ]
+    },
+    "Consultar saldos del empleado": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
       ]
     }
   },
